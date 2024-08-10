@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draughts (Checkers) Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #0000FF; /* Blue background */
+            text-align: center;
+        }
+
+        #name-input-container, #intro-container, #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #game-container {
+            display: none; /* Ensure this is set to flex when needed */
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #board {
+            width: 600px; /* Adjust width */
+            height: 720px; /* Adjust height */
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(12, 1fr);
+            border: 2px solid #333;
+            position: relative;
+        }
+
+        #board div {
+            width: 100%;
+            height: 100%;
+        }
+
+        .yellow {
+            background-color: #FFFF00; /* Yellow */
+        }
+
+        .black {
+            background-color: #000000; /* Black */
+        }
+
+        .piece {
+            border-radius: 50%;
+            width: 70%; /* Adjust piece size */
+            height: 70%; /* Adjust piece size */
+            position: absolute;
+            transform: translate(-50%, -50%);
+        }
+
+        .blue-piece {
+            background-color: #0000FF; /* Blue */
+        }
+
+        .red-piece {
+            background-color: #FF0000; /* Red */
+        }
+
+        #controls {
+            margin-top: 20px;
+        }
+
+        button {
+            margin: 0 5px;
+            padding: 10px 20px; /* Increase padding for thicker buttons */
+            font-size: 16px; /* Increase font size for better readability */
+            font-weight: bold; /* Make text bold */
+            border: none;
+            border-radius: 5px; /* Add rounded corners */
+            background-color: #FFD700; /* Button background color */
+            color: #000; /* Button text color */
+            cursor: pointer; /* Change cursor to pointer */
+            transition: background-color 0.3s; /* Smooth background color transition */
+        }
+
+        button:hover {
+            background-color: #FFC107; /* Darker background on hover */
+        }
+
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .highlight {
+            border: 2px solid green;
+        }
+    </style>
+</head>
+<body>
+    <div id="name-input-container">
+        <h1>Enter Your Name</h1>
+        <input type="text" id="username-input" placeholder="Your Name" />
+        <button id="submit-name">Submit</button>
+    </div>
+    <div id="intro-container" style="display:none;">
+        <h1>Welcome, <span id="username-display"></span>!</h1>
+        <p>Do you want to play against Wonder?</p>
+        <button id="yes">Yes</button>
+        <button id="no">No</button>
+    </div>
+    <div id="game-container">
+        <div id="board"></div>
+        <div id="controls">
+            <button id="undo">Undo</button>
+            <button id="redo">Redo</button>
+            <button id="save">Save</button>
+            <button id="load">Load</button>
+            <p id="status">Player's turn</p>
+        </div>
+    </div>
+
+    <script>
+        const nameInputContainer = document.getElementById('name-input-container');
+        const introContainer = document.getElementById('intro-container');
+        const gameContainer = document.getElementById('game-container');
+        const board = document.getElementById('board');
+        const usernameInput = document.getElementById('username-input');
+        const submitNameButton = document.getElementById('submit-name');
+        const usernameDisplay = document.getElementById('username-display');
+        const status = document.getElementById('status');
+        const undoButton = document.getElementById('undo');
+        const redoButton = document.getElementById('redo');
+        const saveButton = document.getElementById('save');
+        const loadButton = document.getElementById('load');
+        const yesButton = document.getElementById('yes');
+        const noButton = document.getElementById('no');
+
+        const rows = 12;
+        const cols = 10;
+
+        let currentPlayer = 'blue';
+        let boardState = Array.from({ length: rows }, () => Array(cols).fill(null));
+        let moveHistory = [];
+        let redoHistory = [];
+        let selectedPiece = null;
+        let username = '';
+
+        submitNameButton.addEventListener('click', () => {
+            username = usernameInput.value.trim();
+            if (username) {
+                usernameDisplay.textContent = username;
+                nameInputContainer.style.display = 'none';
+                introContainer.style.display = 'flex';
+            }
+        });
+
+        yesButton.addEventListener('click', () => {
+            introContainer.style.display = 'none';
+            gameContainer.style.display = 'flex';
+            initializeBoard();
+        });
+
+        noButton.addEventListener('click', () => {
+            introContainer.innerHTML = `<h2>You're scared, ${username}! 😂</h2>`;
+        });
+
+        function initializeBoard() {
+            board.innerHTML = ''; // Clear existing cells
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const cell = document.createElement('div');
+                    const isBlack = (row + col) % 2 === 1;
+                    cell.className = isBlack ? 'black' : 'yellow';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.addEventListener('click', () => handleCellClick(row, col));
+                    board.appendChild(cell);
+                }
+            }
+            setupInitialPieces();
+        }
+
+        function setupInitialPieces() {
+            // Place pieces for player blue
+            for (let row = 0; row < 4; row++) {
+                for (let col = (row % 2); col < cols; col += 2) {
+                    placePiece(row, col, 'blue');
+                }
+            }
+            // Place pieces for player red
+            for (let row = rows - 4; row < rows; row++) {
+                for (let col = (row % 2); col < cols; col += 2) {
+                    placePiece(row, col, 'red');
+                }
+            }
+        }
+
+        function placePiece(row, col, color) {
+            const cell = board.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+            const piece = document.createElement('div');
+            piece.className = `piece ${color}-piece`;
+            cell.appendChild(piece);
+            boardState[row][col] = color;
+        }
+
+        function handleCellClick(row, col) {
+            if (selectedPiece) {
+                const [startRow, startCol] = selectedPiece;
+                if (isValidMove(startRow, startCol, row, col)) {
+                    movePiece(startRow, startCol, row, col);
+                    moveHistory.push({ startRow, startCol, endRow: row, endCol: col });
+                    redoHistory = []; // Clear redo history on new move
+                    if (currentPlayer === 'blue') {
+                        currentPlayer = 'red';
+                        status.textContent = "Red's turn";
+                    } else {
+                        currentPlayer = 'blue';
+                        status.textContent = "Blue's turn";
+                        aiMove();
+                    }
+                }
+                selectedPiece = null;
+                updateBoard();
+            } else if (boardState[row][col] === currentPlayer) {
+                selectedPiece = [row, col];
+                highlightMoves(row, col);
+            }
+        }
+
+        function isValidMove(startRow, startCol, endRow, endCol) {
+            const piece = boardState[startRow][startCol];
+            if (!piece) return false;
+            const direction = piece === 'blue' ? 1 : -1;
+
+            // Check if move is diagonal
+            const rowDiff = Math.abs(endRow - startRow);
+            const colDiff = Math.abs(endCol - startCol);
+            if (rowDiff !== colDiff || rowDiff !== 1) return false;
+
+            // Check if destination is empty
+            if (boardState[endRow][endCol] !== null) return false;
+
+            return true;
+        }
+
+        function movePiece(startRow, startCol, endRow, endCol) {
+            boardState[endRow][endCol] = boardState[startRow][startCol];
+            boardState[startRow][startCol] = null;
+        }
+
+        function highlightMoves(row, col) {
+            board.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
+            const directions = [[1, -1], [1, 1], [-1, -1], [-1, 1]];
+            directions.forEach(([rowDir, colDir]) => {
+                const newRow = row + rowDir;
+                const newCol = col + colDir;
+                if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
+                    const cell = board.querySelector(`[data-row="${newRow}"][data-col="${newCol}"]`);
+                    if (cell.classList.contains('yellow') && !boardState[newRow][newCol]) {
+                        cell.classList.add('highlight');
+                    }
+                }
+            });
+        }
+
+        function aiMove() {
+            // Basic AI logic (should be replaced with actual AI)
+            console.log("AI is making a move...");
+            const moves = [[5, 5], [6, 6]]; // Example move coordinates
+            movePiece(moves[0][0], moves[0][1], moves[1][0], moves[1][1]);
+            currentPlayer = 'blue';
+            status.textContent = "Blue's turn";
+        }
+
+        function undoMove() {
+            if (moveHistory.length > 0) {
+                const lastMove = moveHistory.pop();
+                redoHistory.push(lastMove);
+                boardState[lastMove.startRow][lastMove.startCol] = boardState[lastMove.endRow][lastMove.endCol];
+                boardState[lastMove.endRow][lastMove.endCol] = null;
+                updateBoard();
+            }
+        }
+
+        function redoMove() {
+            if (redoHistory.length > 0) {
+                const move = redoHistory.pop();
+                moveHistory.push(move);
+                boardState[move.endRow][move.endCol] = boardState[move.startRow][move.startCol];
+                boardState[move.startRow][move.startCol] = null;
+                updateBoard();
+            }
+        }
+
+        function saveGame() {
+            localStorage.setItem('draughtsGame', JSON.stringify({ boardState, moveHistory }));
+        }
+
+        function loadGame() {
+            const savedState = JSON.parse(localStorage.getItem('draughtsGame'));
+            if (savedState) {
+                boardState = savedState.boardState;
+                moveHistory = savedState.moveHistory || [];
+                redoHistory = [];
+                updateBoard();
+            }
+        }
+
+        function updateBoard() {
+            board.querySelectorAll('.piece').forEach(piece => piece.remove());
+            setupInitialPieces();
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    if (boardState[row][col]) {
+                        placePiece(row, col, boardState[row][col]);
+                    }
+                }
+            }
+        }
+
+        undoButton.addEventListener('click', undoMove);
+        redoButton.addEventListener('click', redoMove);
+        saveButton.addEventListener('click', saveGame);
+        loadButton.addEventListener('click', loadGame);
+    </script>
+</body>
+</html>
